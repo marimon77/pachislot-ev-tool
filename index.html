@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>北斗 転生の章2 期待値計算ツール</title>
+
+<style>
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+  background:#f4f6fb;
+  margin:0;
+  padding:10px;
+}
+.box{
+  background:#fff;
+  border-radius:10px;
+  padding:14px;
+  max-width:480px;
+  margin:auto;
+  box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+h1{
+  font-size:18px;
+  text-align:center;
+  margin-bottom:12px;
+}
+label{
+  font-size:14px;
+  font-weight:bold;
+}
+input,select,button{
+  width:100%;
+  padding:8px;
+  font-size:16px;
+  border-radius:6px;
+  border:1px solid #ccc;
+  margin-bottom:8px;
+  box-sizing:border-box;
+}
+button{
+  background:#007aff;
+  color:#fff;
+  border:none;
+  font-weight:bold;
+}
+.result{
+  background:#f1f3f7;
+  padding:10px;
+  border-radius:8px;
+  margin-top:10px;
+  font-size:14px;
+}
+.good{color:#d60000;font-weight:bold;}
+.small{font-size:12px;color:#666;}
+</style>
+</head>
+
+<body>
+<div class="box">
+<h1>北斗 転生の章2<br>期待値 × モード補正</h1>
+
+<label>現在あべし</label>
+<input id="abeshi" type="number" value="0">
+
+<label>枠ランプ示唆</label>
+<select id="lamp">
+  <option value="none">なし</option>
+  <option value="yellow">黄緑（B以上）</option>
+  <option value="yellow_blink">黄緑点滅（C以上）</option>
+  <option value="gold">金（B以上強）</option>
+  <option value="gold_blink">金点滅（C以上強）</option>
+  <option value="purple">紫（B以上＋設定示唆）</option>
+</select>
+
+<label>換金率</label>
+<select id="rate">
+  <option value="20">等価</option>
+  <option value="17.86">5.6枚</option>
+  <option value="16.67">6.0枚</option>
+</select>
+
+<button onclick="calc()">計算</button>
+
+<div id="result" class="result"></div>
+</div>
+
+<script>
+// ===== 定数 =====
+const TENPA_CORRECTION = 1.085; // てんぱ補正（あべし加算）
+const COIN_PER_ABESHI = 50 / 31.5; // 実戦値
+const ABESHI_PER_MIN = 800 / 60; // 約13.3あべし/分
+
+const MODE_CEILING = {
+  A:1536,
+  B:1280,
+  C:1024,
+  T:256
+};
+
+// 実戦寄せ平均獲得枚数
+const MODE_PAY = {
+  A:520,
+  B:610,
+  C:720,
+  T:850
+};
+
+function calc(){
+
+  const abeshi = Number(document.getElementById("abeshi").value);
+  const lamp = document.getElementById("lamp").value;
+  const rate = Number(document.getElementById("rate").value);
+
+  // ===== 初期モード分布 =====
+  let mode = {A:0.52,B:0.24,C:0.18,T:0.06};
+
+  if(lamp==="yellow") mode={A:0.05,B:0.55,C:0.30,T:0.10};
+  if(lamp==="yellow_blink") mode={A:0.01,B:0.20,C:0.60,T:0.19};
+  if(lamp==="gold") mode={A:0.01,B:0.60,C:0.30,T:0.09};
+  if(lamp==="gold_blink") mode={A:0.00,B:0.15,C:0.65,T:0.20};
+  if(lamp==="purple") mode={A:0.00,B:0.55,C:0.35,T:0.10};
+
+  // ===== あべし進行によるA否定補正 =====
+  if(abeshi>=350) mode.A*=0.8;
+  if(abeshi>=550) mode.A*=0.6;
+  if(abeshi>=750) mode.A*=0.45;
+  if(abeshi>=900) mode.A*=0.30;
+
+  // ===== 天国0%回避（実戦下限） =====
+  if(mode.T < 0.02) mode.T = 0.02;
+
+  // 正規化
+  let total=mode.A+mode.B+mode.C+mode.T;
+  for(let k in mode){ mode[k]/=total; }
+
+  // ===== てんぱ補正後あべし =====
+  const corrAbeshi = abeshi * TENPA_CORRECTION;
+
+  // ===== モード別残りあべし =====
+  let remain =
+    mode.A*(MODE_CEILING.A-corrAbeshi) +
+    mode.B*(MODE_CEILING.B-corrAbeshi) +
+    mode.C*(MODE_CEILING.C-corrAbeshi) +
+    mode.T*(MODE_CEILING.T-corrAbeshi);
+
+  remain = Math.max(0,remain);
+
+  // ===== 投資・時間 =====
+  const invest = Math.round(remain * COIN_PER_ABESHI * rate);
+  const time = Math.round(remain / ABESHI_PER_MIN);
+
+  // ===== 平均獲得 =====
+  const avgPay =
+    mode.A*MODE_PAY.A +
+    mode.B*MODE_PAY.B +
+    mode.C*MODE_PAY.C +
+    mode.T*MODE_PAY.T;
+
+  const ev = Math.round(avgPay*rate - invest);
+  const hourly = time>0 ? Math.round(ev/(time/60)) : 0;
+
+  // ===== ヤメ時 =====
+  let stop="様子見";
+  if(mode.T>0.18) stop="128あべしまで";
+  else if(mode.C>0.45) stop="576あべしまで";
+  else if(mode.B>0.45) stop="896あべしまで";
+  else stop="前兆確認ヤメ";
+
+  document.getElementById("result").innerHTML=`
+【モード期待度】<br>
+A:${(mode.A*100).toFixed(1)}% /
+B:${(mode.B*100).toFixed(1)}% /
+C:${(mode.C*100).toFixed(1)}% /
+天国:${(mode.T*100).toFixed(1)}%<br><br>
+
+天井まで平均：${Math.round(remain)}あべし<br>
+到達時間：約${time}分<br>
+平均投資：約${invest}円<br>
+平均獲得：約${Math.round(avgPay)}枚<br><br>
+
+<span class="good">期待値：${ev}円</span><br>
+時給換算：${hourly}円/h<br><br>
+
+【推奨ヤメ】${stop}<br>
+<span class="small">※てんぱ補正・実戦値ベース</span>
+`;
+}
+</script>
+</body>
+</html>
