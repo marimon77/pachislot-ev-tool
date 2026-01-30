@@ -1,179 +1,86 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>転生の章2 期待値計算</title>
-
-<style>
-body{
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-  background:#f4f6f8;
-  padding:12px;
-}
-.box{
-  background:#fff;
-  border-radius:12px;
-  padding:15px;
-  box-shadow:0 2px 8px rgba(0,0,0,.08);
-  max-width:480px;
-  margin:auto;
-}
-h2{
-  text-align:center;
-  margin:4px 0 12px;
-}
-label{
-  font-weight:600;
-  display:block;
-  margin-top:10px;
-}
-input,select,button{
-  width:100%;
-  padding:10px;
-  font-size:16px;
-  border-radius:8px;
-  border:1px solid #ccc;
-  box-sizing:border-box;
-}
-button{
-  margin-top:12px;
-  background:#007aff;
-  color:#fff;
-  border:none;
-  font-weight:bold;
-}
-.result{
-  margin-top:12px;
-  background:#fafafa;
-  border-radius:10px;
-  padding:12px;
-  line-height:1.6;
-  font-size:15px;
-}
-.good{color:#d00000;font-weight:bold;}
-.mid{color:#ff9500;font-weight:bold;}
-.bad{color:#666;}
-</style>
-</head>
-
-<body>
-
-<div class="box">
-<h2>転生の章2 期待値計算</h2>
-
-<label>現在あべし</label>
-<input type="number" id="current" placeholder="例：820">
-
-<label>換金率</label>
-<select id="rate">
-  <option value="20">等価（20円）</option>
-  <option value="56">56枚交換（17.86円）</option>
-</select>
-
-<label>示唆ランプ</label>
-<select id="lamp">
-  <option value="none">なし</option>
-  <option value="white">白（A示唆）</option>
-  <option value="blue">青（B示唆）</option>
-  <option value="green">緑（C示唆）</option>
-  <option value="red">赤（天国示唆）</option>
-  <option value="rainbow">虹（天国濃厚）</option>
-</select>
-
-<button onclick="calc()">計算する</button>
-
-<div id="result" class="result"></div>
-</div>
-
-<script>
-const CEILING = 1536;
-const COST = 3.0; // 実戦値
-const AVG_PAY = { A:580, B:610, C:660, T:720 };
-
-const lampTable = {
-  none:{A:0.49,B:0.22,C:0.20,T:0.09},
-  white:{A:0.65,B:0.20,C:0.10,T:0.05},
-  blue:{A:0.25,B:0.45,C:0.20,T:0.10},
-  green:{A:0.10,B:0.30,C:0.45,T:0.15},
-  red:{A:0.05,B:0.15,C:0.30,T:0.50},
-  rainbow:{A:0.00,B:0.05,C:0.20,T:0.75}
-};
-
-function coinValue(rate){
-  return rate==="56" ? 1000/56 : 20;
-}
-
-function hitRate(mode,a){
-  if(mode==="A"){
-    if(a<193) return 0.05;
-    if(a<256) return 0.35;
-    if(a<1217) return 0.12;
-    return 0.90;
-  }
-  if(mode==="B"){
-    if(a<193) return 0.08;
-    if(a<256) return 0.45;
-    if(a<705) return 0.15;
-    if(a<768) return 0.65;
-    if(a<833) return 0.30;
-    return 0.95;
-  }
-  if(mode==="C"){
-    if(a<193) return 0.10;
-    if(a<256) return 0.50;
-    if(a<513) return 0.18;
-    return 0.95;
-  }
-  if(mode==="T"){
-    if(a<128) return 0.85;
-    return 1.00;
-  }
-}
-
-function judge(ev){
-  if(ev>=3000) return "<span class='good'>🔥 神台</span>";
-  if(ev>=1500) return "<span class='good'>◎ 打つ</span>";
-  if(ev>=500)  return "<span class='mid'>○ 可</span>";
-  if(ev>=0)    return "<span class='mid'>△ 様子見</span>";
-  return "<span class='bad'>✕ 捨て</span>";
-}
-
 function calc(){
-  const a = Number(document.getElementById("current").value);
-  if(!a){ alert("現在あべしを入力してください"); return; }
 
-  const rate = document.getElementById("rate").value;
-  const lamp = document.getElementById("lamp").value;
+  let abeshi = Number(document.getElementById("abeshi").value);
+  let lamp = document.getElementById("lamp").value;
+  let rate = Number(document.getElementById("rate").value);
 
-  const coin = coinValue(rate);
-  const invest = Math.max(0,(CEILING-a)*COST);
+  // ---- 投資・時間換算（てんぱ加味）
+  const yenPerAbeshi = 19.5;
+  const abeshiPerMin = 26;
 
-  let ev=0,payout=0;
+  let remain = Math.max(0,1536-abeshi);
+  let invest = remain * yenPerAbeshi;
+  let time = remain / abeshiPerMin;
 
-  for(const m in lampTable[lamp]){
-    const p = lampTable[lamp][m];
-    const hit = hitRate(m,a);
-    payout += AVG_PAY[m]*coin*hit*p;
-    ev += (AVG_PAY[m]*coin*hit - invest)*p;
+  // ---- モード初期分布
+  let mode = {A:0.50, B:0.27, C:0.17, T:0.06};
+
+  // ---- 示唆補正
+  if(lamp=="yellow") mode={A:0.05,B:0.55,C:0.30,T:0.10};
+  if(lamp=="yellow_blink") mode={A:0.01,B:0.20,C:0.60,T:0.19};
+  if(lamp=="gold") mode={A:0.01,B:0.60,C:0.30,T:0.09};
+  if(lamp=="gold_blink") mode={A:0.00,B:0.15,C:0.65,T:0.20};
+  if(lamp=="purple") mode={A:0.00,B:0.55,C:0.35,T:0.10};
+
+  // ---- 天国否定
+  if(abeshi > 128) mode.T = 0;
+
+  // ---- 深さ補正
+  if(abeshi>=350) mode.A*=0.75;
+  if(abeshi>=550) mode.A*=0.55;
+  if(abeshi>=750) mode.A*=0.40;
+  if(abeshi>=900) mode.A*=0.25;
+
+  // ---- 正規化
+  let total = mode.A+mode.B+mode.C+mode.T;
+  for(let k in mode){ mode[k]/=total; }
+
+  // ---- ゾーン別当選率
+  const zoneRate = {
+    T: {128:0.70},
+    C: {256:0.32, 448:0.18, 576:0.45},
+    B: {256:0.18, 448:0.14, 896:0.52},
+    A: {256:0.12, 448:0.08, 576:0.08, 896:0.06, 1152:0.06, 1536:0.60}
+  };
+
+  // ---- 平均獲得
+  const pay = {A:520, B:610, C:720, T:850, TEN:650};
+
+  function zoneEV(m, zone, rate, p){
+    if(abeshi >= zone) return 0;
+    return m * rate * p;
   }
 
-  const remain = CEILING - a;
-  const time = Math.max(0, Math.round(remain/23)); // 約23あべし/分
+  let ev =
+    zoneEV(mode.T,128,0.70,pay.T) +
 
-  ev = Math.round(ev);
-  payout = Math.round(payout);
+    zoneEV(mode.C,256,0.32,pay.C) +
+    zoneEV(mode.C,448,0.18,pay.C) +
+    zoneEV(mode.C,576,0.45,pay.C) +
 
-  document.getElementById("result").innerHTML =
-  `<b>${a} あべし</b><br>
-   天井まで：約<b>${remain}</b> あべし<br>
-   想定時間：約<b>${time}分</b><br>
-   平均投資：約<b>${Math.round(invest)}円</b><br>
-   期待回収：${payout}円<br>
-   期待値：<b>${ev}円</b><br>
-   判定：${judge(ev)}`;
+    zoneEV(mode.B,256,0.18,pay.B) +
+    zoneEV(mode.B,448,0.14,pay.B) +
+    zoneEV(mode.B,896,0.52,pay.B) +
+
+    zoneEV(mode.A,256,0.12,pay.A) +
+    zoneEV(mode.A,448,0.08,pay.A) +
+    zoneEV(mode.A,576,0.08,pay.A) +
+    zoneEV(mode.A,896,0.06,pay.A) +
+    zoneEV(mode.A,1152,0.06,pay.A) +
+    zoneEV(mode.A,1536,0.60,pay.TEN);
+
+  let evYen = ev*(50/rate) - invest;
+  let hourly = evYen/(time/60);
+
+  document.getElementById("result").innerHTML=`
+  【モード期待度】<br>
+  A:${(mode.A*100).toFixed(1)}% / B:${(mode.B*100).toFixed(1)}% / 
+  C:${(mode.C*100).toFixed(1)}% / 天国:${(mode.T*100).toFixed(1)}%<br><br>
+
+  天井まで：${remain}あべし（約${Math.round(time)}分）<br>
+  平均投資：約${Math.round(invest)}円<br>
+
+  <span class="good">期待値：${Math.round(evYen)}円</span><br>
+  時給：${Math.round(hourly)}円/h
+  `;
 }
-</script>
-
-</body>
-</html>
