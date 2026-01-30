@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>転生の章2 期待値計算</title>
+<style>
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background:#f5f5f5;
+  padding:15px;
+}
+.box {
+  background:#fff;
+  border-radius:12px;
+  padding:15px;
+  box-shadow:0 2px 6px rgba(0,0,0,.1);
+}
+h2 { text-align:center; margin:5px 0 15px; }
+label { font-weight:600; display:block; margin-top:8px; }
+input, select, button {
+  width:100%;
+  padding:10px;
+  font-size:16px;
+  margin-top:5px;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+button {
+  background:#007aff;
+  color:#fff;
+  border:none;
+  font-weight:bold;
+}
+.result {
+  margin-top:15px;
+  padding:12px;
+  border-radius:10px;
+  background:#fafafa;
+  line-height:1.6;
+}
+.good { color:#d00000; font-weight:bold; }
+.mid  { color:#ff9500; font-weight:bold; }
+.bad  { color:#666; }
+</style>
+</head>
+<body>
+
+<div class="box">
+<h2>転生の章2 期待値計算</h2>
+
+<label>現在あべし</label>
+<input type="number" id="current" placeholder="例：820">
+
+<label>換金率</label>
+<select id="rate">
+  <option value="20">等価（20円）</option>
+  <option value="56">56枚交換（17.86円）</option>
+  <option value="50">50枚交換（20円）</option>
+</select>
+
+<label>示唆</label>
+<select id="mode">
+  <option value="none">なし</option>
+  <option value="weak">弱</option>
+  <option value="mid">中</option>
+  <option value="strong">強</option>
+  <option value="sure">確定</option>
+</select>
+
+<button onclick="calc()">期待値を計算</button>
+
+<div id="result" class="result"></div>
+</div>
+
+<script>
+const CEILING = 1536;
+const COST = 2.9;
+const AVG_PAY = 625;
+
+const modeTable = {
+  none:  {A:0.49, B:0.22, C:0.20, T:0.09},
+  weak:  {A:0.30, B:0.35, C:0.25, T:0.10},
+  mid:   {A:0.15, B:0.35, C:0.30, T:0.20},
+  strong:{A:0.05, B:0.25, C:0.30, T:0.40},
+  sure:  {A:0.00, B:0.10, C:0.30, T:0.60}
+};
+
+function coinValue(rate){
+  if(rate==="20") return 20;
+  if(rate==="56") return 1000/56;
+  if(rate==="50") return 20;
+  return 20;
+}
+
+function hitRate(mode,a){
+  if(mode==="A"){
+    if(a<193) return 0.05;
+    if(a<256) return 0.35;
+    if(a<1217) return 0.12;
+    return 0.90;
+  }
+  if(mode==="B"){
+    if(a<193) return 0.08;
+    if(a<256) return 0.45;
+    if(a<705) return 0.15;
+    if(a<768) return 0.65;
+    if(a<833) return 0.30;
+    return 0.95;
+  }
+  if(mode==="C"){
+    if(a<193) return 0.10;
+    if(a<256) return 0.50;
+    if(a<513) return 0.18;
+    return 0.95;
+  }
+  if(mode==="T"){
+    if(a<128) return 0.85;
+    return 1.00;
+  }
+}
+
+function judge(ev){
+  if(ev>=3000) return "<span class='good'>🔥 神台</span>";
+  if(ev>=1500) return "<span class='good'>◎ 打つ</span>";
+  if(ev>=500)  return "<span class='mid'>○ 可</span>";
+  if(ev>=0)    return "<span class='mid'>△ 様子見</span>";
+  return "<span class='bad'>✕ 捨て</span>";
+}
+
+function calc(){
+  const a = Number(document.getElementById("current").value);
+  if(!a){ alert("あべしを入力してください"); return; }
+
+  const rate = document.getElementById("rate").value;
+  const hint = document.getElementById("mode").value;
+
+  const coin = coinValue(rate);
+  const invest = Math.max(0,(CEILING-a)*COST);
+
+  let ev=0, payout=0;
+
+  for(const m in modeTable[hint]){
+    const p = modeTable[hint][m];
+    const hit = hitRate(m,a);
+    payout += AVG_PAY*coin*hit*p;
+    ev += (AVG_PAY*coin*hit - invest)*p;
+  }
+
+  ev = Math.round(ev);
+  payout = Math.round(payout);
+
+  document.getElementById("result").innerHTML =
+  `<b>${a} あべし</b><br>
+   想定投資：${Math.round(invest)}円<br>
+   期待回収：${payout}円<br>
+   期待値：<b>${ev}円</b><br>
+   判定：${judge(ev)}`;
+}
+</script>
+
+</body>
+</html>
