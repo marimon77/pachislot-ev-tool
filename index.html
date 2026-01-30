@@ -14,7 +14,7 @@ body{
 }
 .box{
   background:#fff;
-  border-radius:10px;
+  border-radius:12px;
   padding:14px;
   max-width:480px;
   margin:auto;
@@ -31,11 +31,11 @@ label{
 }
 input,select,button{
   width:100%;
-  padding:8px;
+  padding:10px;
   font-size:16px;
-  border-radius:6px;
+  border-radius:8px;
   border:1px solid #ccc;
-  margin-bottom:8px;
+  margin-bottom:10px;
   box-sizing:border-box;
 }
 button{
@@ -46,12 +46,13 @@ button{
 }
 .result{
   background:#f1f3f7;
-  padding:10px;
-  border-radius:8px;
-  margin-top:10px;
+  padding:12px;
+  border-radius:10px;
+  margin-top:12px;
   font-size:14px;
+  line-height:1.6;
 }
-.good{color:#d60000;font-weight:bold;}
+.good{color:#d60000;font-weight:bold;font-size:16px;}
 </style>
 </head>
 
@@ -60,7 +61,7 @@ button{
 <h1>北斗 転生の章2<br>AI期待値 × モード推測</h1>
 
 <label>現在あべし</label>
-<input id="abeshi" type="number" value="0">
+<input id="abeshi" type="number" value="0" min="0" max="1536">
 
 <label>枠ランプ示唆</label>
 <select id="lamp">
@@ -79,7 +80,7 @@ button{
   <option value="6">6.0枚</option>
 </select>
 
-<button onclick="calc()">計算</button>
+<button onclick="calc()">期待値計算</button>
 
 <div id="result" class="result"></div>
 </div>
@@ -91,34 +92,73 @@ function calc(){
   let lamp = document.getElementById("lamp").value;
   let rate = Number(document.getElementById("rate").value);
 
-  let mode = {A:0.52,B:0.24,C:0.18,T:0.06};
+  // ---- 投資 & 時間（てんぱ補正込み）
+  const yenPerAbeshi = 19.5;
+  const abeshiPerMin = 26;
 
+  let remain = Math.max(0,1536-abeshi);
+  let invest = remain * yenPerAbeshi;
+  let time = remain / abeshiPerMin;
+
+  // ---- モード初期分布
+  let mode = {A:0.50, B:0.27, C:0.17, T:0.06};
+
+  // ---- ランプ示唆補正
   if(lamp=="yellow") mode={A:0.05,B:0.55,C:0.30,T:0.10};
   if(lamp=="yellow_blink") mode={A:0.01,B:0.20,C:0.60,T:0.19};
   if(lamp=="gold") mode={A:0.01,B:0.60,C:0.30,T:0.09};
   if(lamp=="gold_blink") mode={A:0.00,B:0.15,C:0.65,T:0.20};
   if(lamp=="purple") mode={A:0.00,B:0.55,C:0.35,T:0.10};
 
-  if(abeshi>=350) mode.A*=0.8;
-  if(abeshi>=550) mode.A*=0.6;
-  if(abeshi>=750) mode.A*=0.45;
-  if(abeshi>=900) mode.A*=0.30;
+  // ---- 天国否定補正
+  if(abeshi > 128) mode.T = 0;
 
-  let total=mode.A+mode.B+mode.C+mode.T;
+  // ---- 深さ補正
+  if(abeshi>=350) mode.A*=0.75;
+  if(abeshi>=550) mode.A*=0.55;
+  if(abeshi>=750) mode.A*=0.40;
+  if(abeshi>=900) mode.A*=0.25;
+
+  // ---- 正規化
+  let total = mode.A+mode.B+mode.C+mode.T;
   for(let k in mode){ mode[k]/=total; }
 
-  let avgPay =
-    mode.A*520 +
-    mode.B*610 +
-    mode.C*720 +
-    mode.T*850;
+  // ---- ゾーン当選率
+  const zoneRate = {
+    T: {128:0.70},
+    C: {256:0.32, 448:0.18, 576:0.45},
+    B: {256:0.18, 448:0.14, 896:0.52},
+    A: {256:0.12, 448:0.08, 576:0.08, 896:0.06, 1152:0.06, 1536:0.60}
+  };
 
-  let remain = Math.max(0,1536-abeshi);
-  let invest = remain*21;
-  let time = remain/23;
+  // ---- 平均獲得
+  const pay = {A:520, B:610, C:720, T:850, TEN:650};
 
-  let ev = avgPay*(50/rate)-invest;
-  let hourly = ev/(time/60);
+  function zoneEV(m, zone, rate, p){
+    if(abeshi >= zone) return 0;
+    return m * rate * p;
+  }
+
+  let ev =
+    zoneEV(mode.T,128,0.70,pay.T) +
+
+    zoneEV(mode.C,256,0.32,pay.C) +
+    zoneEV(mode.C,448,0.18,pay.C) +
+    zoneEV(mode.C,576,0.45,pay.C) +
+
+    zoneEV(mode.B,256,0.18,pay.B) +
+    zoneEV(mode.B,448,0.14,pay.B) +
+    zoneEV(mode.B,896,0.52,pay.B) +
+
+    zoneEV(mode.A,256,0.12,pay.A) +
+    zoneEV(mode.A,448,0.08,pay.A) +
+    zoneEV(mode.A,576,0.08,pay.A) +
+    zoneEV(mode.A,896,0.06,pay.A) +
+    zoneEV(mode.A,1152,0.06,pay.A) +
+    zoneEV(mode.A,1536,0.60,pay.TEN);
+
+  let evYen = ev*(50/rate) - invest;
+  let hourly = evYen/(time/60);
 
   let stop="";
   if(mode.T>0.18) stop="天国期待 → 128まで";
@@ -133,9 +173,8 @@ function calc(){
 
   天井まで：${remain}あべし（約${Math.round(time)}分）<br>
   平均投資：約${Math.round(invest)}円<br>
-  平均獲得：約${Math.round(avgPay)}枚<br>
 
-  <span class="good">期待値：${Math.round(ev)}円</span><br>
+  <span class="good">期待値：${Math.round(evYen)}円</span><br>
   時給：${Math.round(hourly)}円/h<br><br>
 
   【AIヤメ時】${stop}
