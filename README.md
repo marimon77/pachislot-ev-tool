@@ -1,1 +1,1 @@
-# pachislot-ev-tool
+# 運勢診断.com
